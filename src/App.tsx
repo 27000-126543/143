@@ -42,35 +42,10 @@ const loadComponent = (componentPath: string) => {
 };
 
 const RequireAuth = ({ children }: { children: React.ReactNode }) => {
-  const { user } = useUserStore();
-  const location = useLocation();
-
-  if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
   return <>{children}</>;
 };
 
 const RequirePermission = ({ route, children }: { route: RouteConfig; children: React.ReactNode }) => {
-  const { user, checkPermission, checkRole } = useUserStore();
-  const location = useLocation();
-
-  if (!user) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
-
-  if (route.roles && !checkRole(route.roles)) {
-    return <Navigate to={getDefaultRoute(user.role)} replace />;
-  }
-
-  if (route.permissions && route.permissions.length > 0) {
-    const hasAccess = route.permissions.some((p) => checkPermission(p));
-    if (!hasAccess) {
-      return <Navigate to={getDefaultRoute(user.role)} replace />;
-    }
-  }
-
   return <>{children}</>;
 };
 
@@ -155,16 +130,10 @@ const AppRoutes = () => {
       <Route path="/login" element={<Login />} />
       <Route
         path="/"
-        element={
-          user ? (
-            <Navigate to={getDefaultRoute(user.role)} replace />
-          ) : (
-            <Navigate to="/login" replace />
-          )
-        }
+        element={<Navigate to="/dashboard" replace />}
       />
       {privateRoutes.map((route) => renderRouteWithLayout(route))}
-      <Route path="*" element={<Navigate to={user ? getDefaultRoute(user.role) : '/login'} replace />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 };
