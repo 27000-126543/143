@@ -14,29 +14,30 @@ const LoadingFallback = () => (
   </div>
 );
 
+const componentPathMap: Record<string, () => Promise<any>> = {
+  '@/pages/dashboard/Dashboard': () => import('@/pages/dashboard/Dashboard'),
+  '@/pages/alarm/AlarmList': () => import('@/pages/alarm/AlarmList'),
+  '@/pages/alarm/AlarmHistory': () => import('@/pages/alarm/AlarmHistory'),
+  '@/pages/inspection/InspectionRoute': () => import('@/pages/inspection/InspectionRoute'),
+  '@/pages/inspection/InspectionRecord': () => import('@/pages/inspection/InspectionRecord'),
+  '@/pages/inspection/HazardManagement': () => import('@/pages/inspection/HazardManagement'),
+  '@/pages/construction/ConstructionApply': () => import('@/pages/construction/ConstructionApply'),
+  '@/pages/construction/ConstructionApprove': () => import('@/pages/construction/ConstructionApprove'),
+  '@/pages/construction/ConstructionList': () => import('@/pages/construction/ConstructionList'),
+  '@/pages/maintenance/MaintenancePlan': () => import('@/pages/maintenance/MaintenancePlan'),
+  '@/pages/maintenance/MaintenanceOrder': () => import('@/pages/maintenance/MaintenanceOrder'),
+  '@/pages/statistics/StatisticsOverview': () => import('@/pages/statistics/StatisticsOverview'),
+  '@/pages/statistics/ReportExport': () => import('@/pages/statistics/ReportExport'),
+  '@/pages/system/UserManagement': () => import('@/pages/system/UserManagement'),
+  '@/pages/system/SystemConfig': () => import('@/pages/system/SystemConfig'),
+};
+
 const loadComponent = (componentPath: string) => {
-  const pathMap: Record<string, () => Promise<any>> = {
-    '@/pages/dashboard/Dashboard': () => import('@/pages/dashboard/Dashboard'),
-    '@/pages/alarm/AlarmList': () => import('@/pages/alarm/AlarmList'),
-    '@/pages/alarm/AlarmHistory': () => import('@/pages/alarm/AlarmHistory'),
-    '@/pages/inspection/InspectionRoute': () => import('@/pages/inspection/InspectionRoute'),
-    '@/pages/inspection/InspectionRecord': () => import('@/pages/inspection/InspectionRecord'),
-    '@/pages/inspection/HazardManagement': () => import('@/pages/inspection/HazardManagement'),
-    '@/pages/construction/ConstructionApply': () => import('@/pages/construction/ConstructionApply'),
-    '@/pages/construction/ConstructionApprove': () => import('@/pages/construction/ConstructionApprove'),
-    '@/pages/construction/ConstructionList': () => import('@/pages/construction/ConstructionList'),
-    '@/pages/maintenance/MaintenancePlan': () => import('@/pages/maintenance/MaintenancePlan'),
-    '@/pages/maintenance/MaintenanceOrder': () => import('@/pages/maintenance/MaintenanceOrder'),
-    '@/pages/statistics/StatisticsOverview': () => import('@/pages/statistics/StatisticsOverview'),
-    '@/pages/statistics/ReportExport': () => import('@/pages/statistics/ReportExport'),
-    '@/pages/system/UserManagement': () => import('@/pages/system/UserManagement'),
-    '@/pages/system/SystemConfig': () => import('@/pages/system/SystemConfig'),
-  };
-  
-  const loader = pathMap[componentPath];
+  const loader = componentPathMap[componentPath];
   if (loader) {
     return lazy(loader);
   }
+  console.warn(`Component not found for path: ${componentPath}`);
   return lazy(() => import('@/components/Empty'));
 };
 
@@ -81,18 +82,16 @@ const AppRoutes = () => {
     document.title = '智慧城市管廊运维安全管理平台';
   }, [location.pathname]);
 
-  const renderRoute = (route: RouteConfig, parentPath = ''): React.ReactNode => {
-    const fullPath = route.path;
-    
-    if (route.hidden) {
-      return null;
-    }
+  const renderRouteWithLayout = (route: RouteConfig): React.ReactNode => {
+    if (route.hidden) return null;
+
+    const Component = route.component ? loadComponent(route.component) : null;
 
     if (route.children && route.children.length > 0) {
       return (
         <Route
-          key={fullPath}
-          path={fullPath}
+          key={route.path}
+          path={route.path}
           element={
             <RequireAuth>
               <MainLayout />
@@ -100,30 +99,56 @@ const AppRoutes = () => {
           }
         >
           <Route index element={<Navigate to={route.children[0].path} replace />} />
-          {route.children.map((child) => renderRoute(child, fullPath))}
+          {route.children.map((child) => renderChildRoute(child))}
         </Route>
       );
     }
 
+    if (Component) {
+      return (
+        <Route
+          key={route.path}
+          path={route.path}
+          element={
+            <RequireAuth>
+              <RequirePermission route={route}>
+                <MainLayout>
+                  <Suspense fallback={<LoadingFallback />}>
+                    <Component />
+                  </Suspense>
+                </MainLayout>
+              </RequirePermission>
+            </RequireAuth>
+          }
+        />
+      );
+    }
+
+    return null;
+  };
+
+  const renderChildRoute = (route: RouteConfig): React.ReactNode => {
+    if (route.hidden || !route.component) return null;
+
     const Component = loadComponent(route.component);
+
     return (
       <Route
-        key={fullPath}
-        path={fullPath}
+        key={route.path}
+        path={route.path}
         element={
-          <RequireAuth>
-            <RequirePermission route={route}>
-              <MainLayout>
-                <Suspense fallback={<LoadingFallback />}>
-                  <Component />
-                </Suspense>
-              </MainLayout>
-            </RequirePermission>
-          </RequireAuth>
+          <RequirePermission route={route}>
+            <Suspense fallback={<LoadingFallback />}>
+              <Component />
+            </Suspense>
+          </RequirePermission>
         }
       />
     );
   };
+
+  const publicRoutes = routes.filter((r) => r.hidden);
+  const privateRoutes = routes.filter((r) => !r.hidden);
 
   return (
     <Routes>
@@ -138,7 +163,7 @@ const AppRoutes = () => {
           )
         }
       />
-      {routes.map((route) => renderRoute(route))}
+      {privateRoutes.map((route) => renderRouteWithLayout(route))}
       <Route path="*" element={<Navigate to={user ? getDefaultRoute(user.role) : '/login'} replace />} />
     </Routes>
   );
